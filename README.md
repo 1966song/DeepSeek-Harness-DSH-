@@ -40,6 +40,12 @@
 
 Web 插件装入 `web` profile 后，在浏览器与桌面壳中同时生效。
 
+## 界面预览
+
+桌面壳 + 壁纸与毛玻璃的整体效果：
+
+![界面展示](docs/screenshots/界面展示.png)
+
 ---
 
 ## 环境要求
@@ -131,6 +137,8 @@ pnpm start
 - **性能**：结果 15s 缓存 + 余额 60s 缓存 + 启动后台预热——面板打开毫秒级返回
 - **接口**：`GET /api/dsh-usage/overview`
 
+![用量统计面板](docs/screenshots/用量界面展示.png)
+
 ### dsh-prompt-rail：对话消息跳转条
 
 **入口**：打开任意会话，聊天区左侧的垂直跳转条
@@ -152,6 +160,8 @@ npx tsc -b tsconfig.client.json
 补丁同时扩展了槽位：助手消息可寻址、摘要最长 400 字符。更新 harness 后需重新打补丁
 （补丁针对具体 revision 编写，若冲突需人工适配）。
 
+![消息跳转条](docs/screenshots/消息条展示.png)
+
 ### dsh-market：插件市场
 
 **入口**：侧边栏底部 🛒 按钮（用量上方）→ 抽屉面板
@@ -166,6 +176,8 @@ npx tsc -b tsconfig.client.json
 
 **接口**：`GET /api/dsh-market/catalog`、`POST /api/dsh-market/install`（repo|git）、
 `POST /api/dsh-market/uninstall`。文件与补丁操作全部在 host 侧。
+
+![插件市场](docs/screenshots/市场展示.png)
 
 ### dsh-desktop-shell：Electron 桌面壳
 
