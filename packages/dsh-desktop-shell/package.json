@@ -1,0 +1,64 @@
+{
+  "name": "dsh-desktop-shell",
+  "version": "0.1.0",
+  "description": "Electron desktop shell for DeepSeek Harness web: transparent rounded window with a frosted-glass border (Windows 11 acrylic), embedded dsh web server, custom title bar and tray",
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "start:verbose": "electron . --verbose",
+    "dist": "electron-builder --win",
+    "dist:nsis": "electron-builder --win nsis",
+    "dist:portable": "electron-builder --win portable"
+  },
+  "build": {
+    "appId": "com.dsh.desktop-shell",
+    "productName": "DSH Desktop",
+    "asar": false,
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "DSH Desktop",
+      "unicode": true,
+      "installerLanguages": [
+        "en_US"
+      ]
+    },
+    "portable": {
+      "artifactName": "DSH-Desktop-${version}-portable.${ext}"
+    },
+    "artifactName": "DSH-Desktop-${version}-${arch}.${ext}"
+  },
+  "devDependencies": {
+    "electron": "^37.0.0",
+    "electron-builder": "^26.0.0"
+  }
+}

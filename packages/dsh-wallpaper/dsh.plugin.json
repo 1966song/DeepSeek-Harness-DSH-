@@ -1,0 +1,12 @@
+{
+  "name": "@local/dsh-wallpaper",
+  "description": "Wallpaper and frosted-glass visuals for the DeepSeek Harness web UI",
+  "version": "0.1.0",
+  "entry": {
+    "name": "@local/dsh-wallpaper",
+    "inject": []
+  },
+  "client": {
+    "platform": "web"
+  }
+}

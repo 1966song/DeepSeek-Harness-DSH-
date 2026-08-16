@@ -1,0 +1,12 @@
+{
+  "name": "@local/dsh-prompt-rail",
+  "description": "Vertical quick-jump rail for the DeepSeek Harness web conversation view",
+  "version": "0.2.0",
+  "entry": {
+    "name": "@local/dsh-prompt-rail",
+    "inject": []
+  },
+  "client": {
+    "platform": "web"
+  }
+}

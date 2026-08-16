@@ -1,0 +1,12 @@
+{
+  "name": "@local/dsh-market",
+  "description": "Plugin marketplace for the DeepSeek Harness web UI",
+  "version": "0.1.0",
+  "entry": {
+    "name": "@local/dsh-market",
+    "inject": []
+  },
+  "client": {
+    "platform": "web"
+  }
+}

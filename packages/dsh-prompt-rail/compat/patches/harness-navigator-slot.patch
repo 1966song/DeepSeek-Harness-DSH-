@@ -1,0 +1,226 @@
+diff --git a/packages/client/ui-conversation/src/client/apply.ts b/packages/client/ui-conversation/src/client/apply.ts
+index f57caea9e5..d42e8902ad 100644
+--- a/packages/client/ui-conversation/src/client/apply.ts
++++ b/packages/client/ui-conversation/src/client/apply.ts
+@@ -381,6 +381,7 @@ export function apply(ctx: Context): void {
+     locale: NS,
+     children: {
+       'conversation.chat.node': { kind: 'keyed', scope: 'session', inject: CHAT_NODE_INJECT },
++      'conversation.chat.navigator': { kind: 'list', scope: 'session' },
+     },
+     store: chatStore,
+     inject: (sessionId: SessionId, actions: BoundActions<typeof chatStore>): ChatViewInjected => {
+diff --git a/packages/client/ui-conversation/src/client/chat/ChatView.tsx b/packages/client/ui-conversation/src/client/chat/ChatView.tsx
+index 58e63b312f..c59d0b33f8 100644
+--- a/packages/client/ui-conversation/src/client/chat/ChatView.tsx
++++ b/packages/client/ui-conversation/src/client/chat/ChatView.tsx
+@@ -13,9 +13,10 @@
+ // lifecycle updates replace only their own row without remounting it.
+ 
+ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+-import type { ConversationTimelineSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
++import type { AssistantMessageNode, ChatConversationViewNode, ConversationTimelineSnapshot, UserMessageNode } from '@deepseek-ai/dsh-client-runtime/client'
++import type { ContentBlock } from '@deepseek-ai/dsh-llm/types'
+ import { IconChevronDownOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+-import type { ChatViewSlotProps } from '../contract/slots.ts'
++import type { ChatNavigationKey, ChatNavigatorItem, ChatViewSlotProps } from '../contract/slots.ts'
+ import { PendingSteeringBubble } from './MessageItem.tsx'
+ import { ChatNodeSeat } from './ChatNodeSeat.tsx'
+ import { formatRunDuration } from './message-chrome.ts'
+@@ -23,6 +24,44 @@ import css from './ChatView.module.css'
+ 
+ const FOLLOW_THRESHOLD = 24
+ 
++/** Collapse a message into the label exposed by its jump control. */
++function messageNavigationSummary(content: readonly ContentBlock[], attachmentLabel: string): string {
++  const text = content
++    .flatMap(block => block.type === 'text' ? [block.text] : [])
++    .join(' ')
++    .replace(/\s+/g, ' ')
++    .trim()
++  return (text || attachmentLabel).slice(0, 400)
++}
++
++/**
++ * Transcript rows that can be addressed through the quick-jump rail: ordinary
++ * user prompts and finalized assistant messages with text content.
++ */
++function chatNavigationItems(
++  order: readonly string[],
++  nodes: { get: (key: string) => ChatConversationViewNode | undefined },
++  attachmentLabel: string,
++): readonly ChatNavigatorItem[] {
++  const items: ChatNavigatorItem[] = []
++  for (const key of order) {
++    const node = nodes.get(key)
++    if (node === undefined) continue
++    if (node.kind === 'user') {
++      items.push({ key: key as ChatNavigationKey, kind: 'user', summary: messageNavigationSummary((node.data as UserMessageNode).content, attachmentLabel) })
++    } else if (node.kind === 'assistant') {
++      const text = (node.data as AssistantMessageNode).blocks
++        .flatMap(block => block.kind === 'text' ? [block.text] : [])
++        .join(' ')
++        .replace(/\s+/g, ' ')
++        .trim()
++      if (text.length === 0) continue
++      items.push({ key: key as ChatNavigationKey, kind: 'assistant', summary: text.slice(0, 400) })
++    }
++  }
++  return items
++}
++
+ /** Active column host when present; otherwise the view-local scroller. */
+ function scrollerOf(from: HTMLElement): HTMLElement {
+   return (from.closest('[data-conversation-scroll]')) ?? from
+@@ -190,7 +229,10 @@ export function ChatView({
+   const lastNode = lastKey === null ? undefined : nodeStore.get(lastKey)
+   const lastSteeringId = pendingSteering[pendingSteering.length - 1]?.id ?? null
+   const followSig = `${openState}:${firstSeq}:${lastKey}:${order.length}:${running ? 1 : 0}:${lastSteeringId ?? ''}`
+-
++  const navigationItems = useMemo(
++    () => chatNavigationItems(order, nodeStore, t('chat.attachmentMessage')),
++    [order, nodeStore, t],
++  )
+   const toBottom = (el: HTMLElement): void => {
+     anchorRef.current = null
+     el.scrollTop = el.scrollHeight
+@@ -346,6 +388,24 @@ export function ChatView({
+     if (!loadingOlder) anchorRef.current = null
+   }, [loadingOlder])
+ 
++  /** Scroll a user-message row into the reader's primary position. */
++  const jumpToMessage = (key: ChatNavigationKey): void => {
++    const local = listRef.current
++    if (local === null) return
++    const row = anchorElement(local, key)
++    if (row === null) return
++    const el = scrollerOf(local)
++    el.scrollTop = Math.max(0, el.scrollTop + flowTop(row, el) - 16)
++    observedTopRef.current = el.scrollTop
++    const floor = Math.max(0, el.scrollHeight - el.clientHeight)
++    const isAtBottom = floor - el.scrollTop <= FOLLOW_THRESHOLD + 1
++    atBottomRef.current = isAtBottom
++    setAtBottom(isAtBottom)
++    const position = isAtBottom ? null : scrollPosition(local, el)
++    if (position === null) chatScroll.save(null)
++    else chatScroll.save(position)
++  }
++
+   const loadOlderAnchored = (): void => {
+     const local = listRef.current
+     /* v8 ignore next -- ref-null guard: the paging button renders inside the list tree. */
+@@ -364,6 +424,7 @@ export function ChatView({
+ 
+   return (
+     <div className={css.root}>
++      {renderSlot('conversation.chat.navigator', { items: navigationItems, jumpTo: jumpToMessage })}
+       <div ref={listRef} className={css.scroll}>
+         <div ref={columnRef} className={css.column} data-chat-flow="">
+           {openState === 'loading' && <div className={css.hint}>{t('chat.loadingHistory')}</div>}
+diff --git a/packages/client/ui-conversation/src/client/contract/slots.ts b/packages/client/ui-conversation/src/client/contract/slots.ts
+index 21259146a7..7840439260 100644
+--- a/packages/client/ui-conversation/src/client/contract/slots.ts
++++ b/packages/client/ui-conversation/src/client/contract/slots.ts
+@@ -1,6 +1,7 @@
+ /** Conversation slot declarations and their composed component props. */
+ import type { ReactNode, RefObject } from 'react'
+ import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
++import type { Branded } from '@deepseek-ai/dsh-brand'
+ import type {
+   InjectFace, MaybeSnapshotSelectorHook, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore,
+   SlotHookFactory, SnapshotSelectorHook,
+@@ -83,6 +84,17 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
+       hookContext: string
+       inject: ChatNodeTurnDataInjected
+     }
++    /**
++     * Additive navigator beside the chat flow. The chat view owns which loaded
++     * ordinary user messages are addressable and the row-scroll operation;
++     * registrants own all visual treatment, preview state, and selection state.
++     * Entries render by ascending `order`.
++     */
++    'conversation.chat.navigator': {
++      kind: 'list'
++      scope: 'session'
++      owner: ChatNavigatorOwnerProps
++    }
+     /**
+      * The chat view's per-command row hole: keyed dispatch on the command
+      * name (`command/run.name`; a run-less cross-window node has none and
+@@ -352,6 +364,34 @@ export interface ChatNodeTurnDataInjected {
+   }
+ }
+ 
++/** Opaque identity of a loaded transcript row in the current chat window. */
++export type ChatNavigationKey = Branded<'ChatNavigationKey'>
++
++/** Row role of one addressable transcript row. */
++export type ChatNavigatorItemKind = 'user' | 'assistant'
++
++/** One transcript message exposed to an additive chat navigator. */
++export interface ChatNavigatorItem {
++  /** Stable row identity valid while the addressed message remains loaded. */
++  readonly key: ChatNavigationKey
++  /** Row role: ordinary user prompts and finalized assistant messages. */
++  readonly kind: ChatNavigatorItemKind
++  /** Short, normalized display label; attachments use the conversation locale fallback. */
++  readonly summary: string
++}
++
++/**
++ * Owner currency of an additive chat navigator. The view deliberately exposes
++ * only loaded ordinary user prompts and finalized assistant messages, never
++ * tool, command, steering, or injected-context rows.
++ */
++export interface ChatNavigatorOwnerProps {
++  /** Addressable transcript rows in transcript order. */
++  readonly items: readonly ChatNavigatorItem[]
++  /** Move the addressed loaded row to the reader's primary position. */
++  jumpTo: (key: ChatNavigationKey) => void
++}
++
+ /** Stable owner currency delivered to one keyed Chat business renderer. */
+ export interface ChatNodeOwnerProps {
+   /** Selected Tool call, when the shared details store names one. */
+@@ -709,7 +749,7 @@ export interface ChatViewInjected {
+ 
+ /** Full chat-view component props: runtime & its Tool/command/tail render shares & store & injected & locale seat. */
+ export type ChatViewSlotProps =
+-  PropsRuntime<'conversation.view'> & PropsRenderSlots<'conversation.chat.node'>
++  PropsRuntime<'conversation.view'> & PropsRenderSlots<'conversation.chat.node' | 'conversation.chat.navigator'>
+   & PropsStore<ChatStore> & ChatViewInjected & PropsLocale<'conversation'>
+ 
+ /**
+diff --git a/packages/client/ui-conversation/src/client/index.ts b/packages/client/ui-conversation/src/client/index.ts
+index 0574aa8375..a07efeec4c 100644
+--- a/packages/client/ui-conversation/src/client/index.ts
++++ b/packages/client/ui-conversation/src/client/index.ts
+@@ -28,7 +28,7 @@ export type {
+   RetryChatData, ToolChatData, TurnTailChatData,
+ } from './contract/chat-nodes.ts'
+ export type {
+-  ChatFileMentions, ChatNodeOwnerProps, ChatNodeViewProps,
++  ChatFileMentions, ChatNavigationKey, ChatNavigatorItem, ChatNavigatorOwnerProps, ChatNodeOwnerProps, ChatNodeViewProps,
+   ChatStore, ChatViewInjected, ChatViewSlotProps, CommandRowOwnerProps, CommandRowProps, ComposerBarInjected,
+   ComposerAttachment, ComposerChainProps, ConversationInjected,
+   ConversationSessionHeaderInjected, ConversationSessionInjected, ConversationSlotProps, ConvViewOwnerProps,
+diff --git a/packages/client/ui-conversation/src/client/locales.ts b/packages/client/ui-conversation/src/client/locales.ts
+index c9b6f658ca..393904bff4 100644
+--- a/packages/client/ui-conversation/src/client/locales.ts
++++ b/packages/client/ui-conversation/src/client/locales.ts
+@@ -91,6 +91,7 @@ export const zh = {
+   'chat.loadError': '历史加载失败：{message}（{code}）',
+   'chat.loadOlder': '加载更早',
+   'chat.toBottom': '回到底部',
++  'chat.attachmentMessage': '图片或附件',
+   'message.extraBlock': '附加内容块',
+   'message.contextInjection': '上下文注入',
+   'message.contextRecall': '跨会话召回',
+@@ -260,6 +261,7 @@ export const en = {
+   'chat.loadError': 'Failed to load history: {message} ({code})',
+   'chat.loadOlder': 'Load earlier',
+   'chat.toBottom': 'Back to bottom',
++  'chat.attachmentMessage': 'Image or attachment',
+   'message.extraBlock': 'Extra content block',
+   'message.contextInjection': 'Context injection',
+   'message.contextRecall': 'Session recall',

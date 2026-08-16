@@ -1,0 +1,12 @@
+{
+  "name": "@local/dsh-usage",
+  "description": "Token usage dashboard for the DeepSeek Harness web UI",
+  "version": "0.1.0",
+  "entry": {
+    "name": "@local/dsh-usage",
+    "inject": []
+  },
+  "client": {
+    "platform": "web"
+  }
+}
