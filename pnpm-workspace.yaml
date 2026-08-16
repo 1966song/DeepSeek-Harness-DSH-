@@ -1,0 +1,13 @@
+packages:
+  - packages/*
+
+# Peer dependencies of workspace packages (@deepseek-ai/*, react) are resolved
+# at install time inside the DSH web profile, not here. Types come from the
+# harness checkout via each package's tsconfig "paths".
+autoInstallPeers: false
+
+# esbuild needs its postinstall to link the platform binary; electron needs
+# its postinstall to fetch the prebuilt runtime.
+allowBuilds:
+  electron: true
+  esbuild: true
